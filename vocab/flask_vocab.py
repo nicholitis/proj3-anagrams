@@ -3,10 +3,12 @@ Flask web site with vocabulary matching game
 (identify vocabulary words that can be made 
 from a scrambled string)
 """
-
 import flask
+from flask import request
+from flask import url_for
+from flask import jsonify
 import logging
-
+import argparse
 # Our own modules
 from letterbag import LetterBag
 from vocab import Vocab
@@ -74,22 +76,20 @@ def success():
 #######################
 
 
-@app.route("/_check", methods=["POST"])
+@app.route("/_check")
 def check():
     """
-    User has submitted the form with a word ('attempt')
-    that should be formed from the jumble and on the
-    vocabulary list.  We respond depending on whether
-    the word is on the vocab list (therefore correctly spelled),
-    made only from the jumble letters, and not a word they
-    already found.
+    basically instead of returning flash to reload the page this function
+    returns json to maintain a dynamic webpage rather than cycling 
+    through static pages every game move. conditional logic is pretty much
+    unchanged.
     """
     app.logger.debug("Entering check")
 
     # The data we need, from form and from cookie
-    text = flask.request.form["attempt"]
+    text = flask.request.args.get("text", type=str)
     jumble = flask.session["jumble"]
-    matches = flask.session.get("matches", [])  # Default to empty list
+    matches = flask.session.get("matches", [])
 
     # Is it good?
     in_jumble = LetterBag(jumble).contains(text)
@@ -101,21 +101,21 @@ def check():
         matches.append(text)
         flask.session["matches"] = matches
     elif text in matches:
-        flask.flash("You already found {}".format(text))
+        alert = "You already found {}".format(text)
+        rslt = {"alert": alert}
+        return jsonify(result=rslt)
     elif not matched:
-        flask.flash("{} isn't in the list of words".format(text))
+        alert = "\'{}\' isn't in the list of words".format(text)
+        rslt = {"alert": alert}
+        return jsonify(result=rslt)
     elif not in_jumble:
-        flask.flash(
-            '"{}" can\'t be made from the letters {}'.format(text, jumble))
+        alert = '"{}" can\'t be made from the letters {}'.format(text,jumble)
+        rslt = {"alert": alert}
+        return jsonify(result=rslt)
     else:
         app.logger.debug("This case shouldn't happen!")
         assert False  # Raises AssertionError
 
-    # Choose page:  Solved enough, or keep going?
-    if len(matches) >= flask.session["target_count"]:
-       return flask.redirect(flask.url_for("success"))
-    else:
-       return flask.redirect(flask.url_for("keep_going"))
 
 ###############
 # AJAX request handlers
@@ -131,6 +131,58 @@ def example():
     app.logger.debug("Got a JSON request")
     rslt = {"key": "value"}
     return flask.jsonify(result=rslt)
+
+@app.route("/_solved")
+def solved():
+    """
+    updates page when a new word is found. most of this code is copy/pasted
+    from the "check" function or the minijax .py script. the bottom bit is 
+    basically the bottom of the original if conditional from "check" as well.
+    """
+
+    ## The data we need, from form and from cookie
+    text = request.args.get("text", type=str)
+    jumble = flask.session["jumble"]
+    matches = flask.session.get("matches", []) # Default to empty list
+
+    ## Is it good?
+    in_jumble = LetterBag(jumble).contains(text)
+    matched = WORDS.has(text)
+
+    if matched and in_jumble and not (text in matches):
+        matches.append(text)
+        flask.session["matches"] = matches
+    if len(matches) >= flask.session["target_count"]:
+        #matched 3 words
+        rslt = { "function": "/success"}
+        return jsonify(result=rslt)
+    else:
+        #yet to match 3 words
+        rslt = { "function": "/keep_going" }
+        return jsonify(result=rslt)
+
+@app.route("/_correct")
+def correct():
+    '''
+    checks input validity
+    '''
+    app.logger.debug("Entering check")
+    text = request.args.get("text", type=str)
+    matches = flask.session.get("matches", [])
+    jumble = flask.session["jumble"]
+    matched = WORDS.has(text)
+    in_jumble = LetterBag(jumble).contains(text)
+
+    if matched and in_jumble:
+        userinput = True
+    else:
+        userinput = False
+
+    if text in matches:
+        userinput = False
+
+    rslt = { "userinput": userinput }
+    return jsonify(result=rslt)
 
 
 #################

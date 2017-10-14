@@ -80,11 +80,11 @@
 <br />
 <div class="row">
   <div class="col-xs-6 text-center">
-  <form id="entry" method="POST" action="/_check">
+  <form id="entry">
     <label for="attempt">Word:</label>
     <input id="attempt" name="attempt" type="text" width="15"
       autocomplete="off"  autofocus />
-    <input type="submit" name="try" />
+      <input type="submit" name="try" />
   </form>
 </div></div>
 
@@ -94,22 +94,61 @@
 <h2>You found </h2>
 <p id="results">
   {% for match in session.matches %}
-  {{ match }} 
+  {{ match }}
   {% endfor %}
 </p>
 {% endif %}
 
+<!--had to delete the chunk of jinja here-->
 
-{% with messages = get_flashed_messages() %}
-  {% if messages %}
-    <!-- Mismatch, already found, etc. "flashed" from Python -->
-    {% for message in messages %}
-      <p class="message">{{ message }}</p>
-    {% endfor %}
-  {% endif %}
-{% endwith %}
-
-
+<p id="message">{{ message }}</p>
 
  </div> <!-- container -->
+  <script>
+    /*
+      a lot of this is basically straight out of the minijax game.
+      i am not a 
+    */
+ $("#entry").submit( function(event) {
+   event.preventDefault();
+  });
+ $("#attempt").keyup(function(event) {
+   var txt = $("#attempt").val().toLowerCase();  // Current content of the input field
+   var keycode = event.which;      // They key that just went up
+   var letter = String.fromCharCode(keycode);
+   if (! "ABCDEFGHIJKLMNOPQRSTUVWXYZ".includes(letter) && txt.length == 0) {
+     showPage("");
+     return
+   }
+   function check() {
+     $.getJSON('/_check', { text: txt },function(data) {
+       flash_string = data.result.alert;
+       showPage(flash_string);
+     });
+   }
+   function solved() {
+     $.getJSON('/_solved', { text: txt },function(data) {
+       function_string = data.result.function;
+       loadPage(function_string);
+     });
+   }
+   $.getJSON( "/_correct", { text: txt },function(data) {
+     userinput = data.result.userinput;
+     check()
+     if (userinput) {
+       $("#attempt").val("");
+       $("#message").html("");
+       solved()
+     }
+   }
+ );
+});
+function showPage(txt) {
+  $("#message").html(txt);
+}
+function loadPage(txt) {
+  location.href = txt;
+}
+ </script>
+ 
 </body> </html>
